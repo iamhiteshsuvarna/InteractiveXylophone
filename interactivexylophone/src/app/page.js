@@ -1,61 +1,82 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useState, useEffect, useRef, useCallback } from "react";
 import React from "react";
 import OscillatorTypeDropdown from "../components/OscillatorTypeDropdown";
 
-const NOTES = {
-  C: 261.63,
-  D: 293.66,
-  E: 329.63, 
-  F: 349.23,
-  G: 392.00,
-  A: 440.00,
-  B: 493.88,
-  C2: 523.25,
-};
-
-const KEY_BINDINGS = {
-  c: 'C',
-  d: 'D',
-  e: 'E',
-  f: 'F',
-  g: 'G',
-  a: 'A',
-  b: 'B',
-  x: 'C2',
-};
+const NOTES = [
+  { key: "a", label: "C4", freq: 261.63 },
+  { key: "w", label: "C#4", freq: 277.18 },
+  { key: "s", label: "D4", freq: 293.66 },
+  { key: "e", label: "D#4", freq: 311.13 },
+  { key: "d", label: "E4", freq: 329.63 },
+  { key: "f", label: "F4", freq: 349.23 },
+  { key: "t", label: "F#4", freq: 369.99 },
+  { key: "g", label: "G4", freq: 392.0 },
+  { key: "y", label: "G#4", freq: 415.3 },
+  { key: "h", label: "A4", freq: 440.0 },
+  { key: "u", label: "A#4", freq: 466.16 },
+  { key: "j", label: "B4", freq: 493.88 },
+  { key: "k", label: "C5", freq: 523.25 },
+  { key: "o", label: "C#5", freq: 554.37 },
+];
 
 export default function NoteExplorer() {
   const [activeNote, setActiveNote] = useState(null);
   const [oscillatorType, setOscillatorType] = useState('triangle');
+  const oscTypeRef = useRef(oscillatorType);
+  const [pressedKey, setPressedKey] = useState(null);
+
+  useEffect(() => {
+    oscTypeRef.current = oscillatorType;
+  }, [oscillatorType]);
+
+  const playNote = useCallback((frequency) => {
+    const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+    const oscillator = audioCtx.createOscillator();
+    oscillator.type = oscTypeRef.current;
+    oscillator.frequency.value = frequency;
+    oscillator.connect(audioCtx.destination);
+    oscillator.start();
+    setTimeout(() => {
+      oscillator.stop();
+      audioCtx.close();
+    }, 500);
+  }, []);
 
   useEffect(() => {
     const handleKeyDown = (e) => {
-      const note = KEY_BINDINGS[e.key];
-      console.log(`Key pressed: ${e.key}, Note: ${note}`);
-      if (note && NOTES[note]) {
-        playNote(NOTES[note], note);
+      const note = NOTES.find((n) => n.key === e.key);
+      console.log(`Key pressed: ${e.key}, Note: ${note.key}`);
+      console.log(`Pressed key: ${pressedKey}`);
+      console.log(note);
+      if (note.key && pressedKey !== e.key) {
+        console.log(`Playing note: ${note.label} (${note.freq} Hz)`);
+        setPressedKey(note.key);
+        playNote(note.freq);
       }
     };
-    window.addEventListener('keydown', handleKeyDown);
-    return () => window.removeEventListener('keydown', handleKeyDown);
-  }, []);
+    const handleKeyUp = (e) => {
+      const note = NOTES.find((n) => n.key === e.key);
+      if (note) {
+        setPressedKey(null);
+      }
+    };
+    window.addEventListener("keydown", handleKeyDown);
+    window.addEventListener("keyup", handleKeyUp);
+    return () => {
+      window.removeEventListener("keydown", handleKeyDown);
+      window.removeEventListener("keyup", handleKeyUp);
+    };
+  }, [pressedKey, playNote]);
 
-  // Get the dropdown element
-  const oscTypeSelect = document.getElementById('oscType');
+  const handleMouseDown = (key, freq) => {
+    setPressedKey(key);
+    playNote(freq);
+  };
 
-  // Function to play a note
-  const playNote = (freq, note) => {
-    const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
-    const oscillator = audioCtx.createOscillator();
-    oscillator.type = oscillatorType; // Set type from dropdown
-    oscillator.frequency.setValueAtTime(freq, audioCtx.currentTime);
-    oscillator.connect(audioCtx.destination);
-    oscillator.start();
-    oscillator.stop(audioCtx.currentTime + 0.5);
-    setActiveNote(note);
-    setTimeout(() => setActiveNote(null), 200);
+  const handleMouseUp = () => {
+    setPressedKey(null);
   };
 
   return (
@@ -71,16 +92,26 @@ export default function NoteExplorer() {
       />
       
       <div className='flex p-2'>
-        {Object.entries(NOTES).map(([note, freq]) => (
+        {NOTES.map(({ key, label, freq }) => (
           <div
-            key={note}
-            onClick={() => playNote(freq, note)}
-            className={`w-16 h-48 border border-solid ${activeNote === note ? 'bg-yellow-500' : 'bg-white'} text-center font-bold cursor-pointer m-2 rounded-lg flex items-center justify-center select-none`}
+            key={key}
+            onMouseDown={() => handleMouseDown(key, freq) }
+            onMouseUp={handleMouseUp}
+            onMouseLeave={handleMouseUp}
+            onTouchStart={() => handlePress(key, freq)}
+            onTouchEnd={handleMouseUp}
+            // onClick={() => playNote(freq, key)}
+            className={`w-16 h-48 border border-solid transform duration-200 shadow-lg shadow-black ease-in ${pressedKey == key? `translate-y-3 shadow-none`: null} ${pressedKey === key ? 'bg-yellow-500' : 'bg-white'} text-center font-bold cursor-pointer m-2 rounded-lg flex items-center justify-center select-none`}
             >
-            {note}
+            {key.toUpperCase()}
+            <br />
+            <span className="text-xs font-normal">{label}</span>
           </div>
         ))}
       </div>
+      <p className="mt-4 text-gray-600">
+        Use keys {NOTES.map(n => n.key.toUpperCase()).join(" ")} to play notes
+      </p>
     </div>
   );
 }
